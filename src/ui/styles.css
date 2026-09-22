@@ -57,22 +57,30 @@ body {
 }
 
 /* 回転しない枠。サイズ・背景・overflowはここが持つ。CLEAR/STUCKのオーバーレイも
-   ここの直下に置くことで、盤面が傾いても文字は正立したまま読める。 */
+   ここの直下に置くことで、盤面が傾いても文字は正立したまま読める。
+   盤面が正方形とは限らない（回収口ポケットの分だけ縦横どちらかが長い）ため、
+   枠自体は常に正方形（長い方の辺basis）にしておく。そうしないと90度回転時に
+   短い方の辺からはみ出してしまう。 */
 .board-frame {
   --cell: clamp(14px, 3.6vw, 26px);
   position: relative;
-  width: calc(var(--cell) * var(--cols));
-  height: calc(var(--cell) * var(--rows));
+  width: calc(var(--cell) * var(--maxdim));
+  height: calc(var(--cell) * var(--maxdim));
   background: #1b2027;
   border-radius: 6px;
   overflow: hidden;
 }
 
-/* 回転する中身（タイル・スライム）だけを包む層。
+/* 回転する中身（タイル・スライム）だけを包む層。実寸(cols×rows)のまま、
+   正方形の枠の中央に配置する。中央寄せをtop/leftで行い、transformはrotateだけに
+   使うことで、回転と位置合わせの計算が混ざらないようにしている。
    「重力が回る」のではなく「箱そのものが傾く」という見せ方にするための回転はここにかける。 */
 .board {
   position: absolute;
-  inset: 0;
+  top: calc(var(--cell) * (var(--maxdim) - var(--rows)) / 2);
+  left: calc(var(--cell) * (var(--maxdim) - var(--cols)) / 2);
+  width: calc(var(--cell) * var(--cols));
+  height: calc(var(--cell) * var(--rows));
   transition: transform 320ms ease;
 }
 

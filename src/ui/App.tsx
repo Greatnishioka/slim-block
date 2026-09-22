@@ -111,7 +111,13 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
 
       <div
         className="board-frame"
-        style={{ ['--cols' as string]: WIDTH, ['--rows' as string]: HEIGHT } as React.CSSProperties}
+        style={
+          {
+            ['--cols' as string]: boardRef.current.width,
+            ['--rows' as string]: boardRef.current.height,
+            ['--maxdim' as string]: Math.max(boardRef.current.width, boardRef.current.height),
+          } as React.CSSProperties
+        }
       >
         <div className="board" style={{ transform: `rotate(${rotation}deg)` }}>
           {terrainTiles.map((t) => (

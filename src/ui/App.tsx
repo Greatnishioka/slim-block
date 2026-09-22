@@ -132,7 +132,11 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
             <div
               key={cell.id}
               className={`slime${cell.draining ? ' draining' : ''}`}
-              style={{ transform: `translate(calc(var(--cell) * ${cell.x}), calc(var(--cell) * ${cell.y}))` }}
+              style={{
+                transform: `translate(calc(var(--cell) * ${cell.x}), calc(var(--cell) * ${cell.y}))`,
+                // 吸い込み中だけ、塊のサイズに応じた所要時間を上書きする（game/playback.ts参照）。
+                transitionDuration: cell.draining && cell.drainMs ? `${cell.drainMs}ms` : undefined,
+              }}
             />
           ))}
         </div>

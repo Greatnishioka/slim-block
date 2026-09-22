@@ -161,6 +161,11 @@ body {
 .slime.draining {
   opacity: 0;
   scale: 0.15;
+  /* 通常のtick移動(linear)とは違い、回収口へ吸い込まれる瞬間だけは
+     だんだん加速していく動き(ease-in寄り)にして「吸い込まれている」感を出す。
+     所要時間(transition-duration)は塊のサイズに応じてJS側(App.tsx)が上書きする
+     （game/playback.ts の drainMs）。 */
+  transition-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
 }
 
 .cleared-overlay {

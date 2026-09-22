@@ -216,6 +216,13 @@ body {
   cursor: pointer;
 }
 
+/* 左右2つの回転ボタンが主操作になったので、押しやすいよう大きめにする */
+.controls-row:first-child button:not(.retry) {
+  width: 64px;
+  height: 64px;
+  font-size: 28px;
+}
+
 .controls button:disabled {
   opacity: 0.4;
   cursor: default;

@@ -5,7 +5,7 @@ import { xOf, yOf } from '../core/board';
 import { generateSolvableLevel, type GeneratedLevel } from '../core/generate';
 import { useKeyboard } from './useKeyboard';
 import { useGameSession } from '../game/useGameSession';
-import { CANONICAL_ANGLE, shortestDelta } from './tilt';
+import { CANONICAL_ANGLE, nextDir, shortestDelta, type Turn } from './tilt';
 
 const WIDTH = 20;
 const HEIGHT = 20;
@@ -52,18 +52,15 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
   const [tilting, setTilting] = useState(false);
   const tiltTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const requestInput = useCallback(
-    (dir: Dir) => {
+  // 「4方向から選ぶ」のではなく「今の状態から箱を左右に90度ずつ回す」操作にする。
+  // 次の重力方向は、今の方向と回す向きから一意に決まる（ui/tilt.ts の nextDir）。
+  const requestRotate = useCallback(
+    (turn: Turn) => {
       if (tilting || status !== 'IDLE') return;
 
+      const dir = nextDir(lastDirRef.current, turn);
       const delta = shortestDelta(CANONICAL_ANGLE[lastDirRef.current], CANONICAL_ANGLE[dir]);
       lastDirRef.current = dir;
-
-      if (delta === 0) {
-        // 同じ方向への連続入力は、箱を傾け直す必要がない
-        input(dir);
-        return;
-      }
 
       setRotation((r) => r + delta);
       setTilting(true);
@@ -83,7 +80,7 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
     retry();
   }, [retry]);
 
-  useKeyboard(requestInput, requestRetry);
+  useKeyboard(requestRotate, requestRetry);
   useEffect(() => () => {
     if (tiltTimerRef.current) clearTimeout(tiltTimerRef.current);
   }, []);
@@ -153,18 +150,12 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
       </div>
 
       <div className="controls">
-        <button aria-label="上方向へ重力" disabled={busy} onPointerDown={() => requestInput('up')}>
-          ↑
-        </button>
         <div className="controls-row">
-          <button aria-label="左方向へ重力" disabled={busy} onPointerDown={() => requestInput('left')}>
-            ←
+          <button aria-label="箱を反時計回りに90度回転" disabled={busy} onPointerDown={() => requestRotate('ccw')}>
+            ↺
           </button>
-          <button aria-label="下方向へ重力" disabled={busy} onPointerDown={() => requestInput('down')}>
-            ↓
-          </button>
-          <button aria-label="右方向へ重力" disabled={busy} onPointerDown={() => requestInput('right')}>
-            →
+          <button aria-label="箱を時計回りに90度回転" disabled={busy} onPointerDown={() => requestRotate('cw')}>
+            ↻
           </button>
         </div>
         <div className="controls-row">

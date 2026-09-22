@@ -27,3 +27,28 @@ export function shortestDelta(from: number, to: number): number {
   if (delta < -180) delta += 360;
   return delta;
 }
+
+export type Turn = 'cw' | 'ccw';
+
+// down→right→up→left→down の円環（CANONICAL_ANGLEと同じ並び）を、
+// 「今の重力方向から見て時計回り/反時計回りに90度回したら次はどの方向か」として引けるようにしたもの。
+// 4方向を個別に選ぶのではなく、常に「今の状態から左右に回す」操作にするための土台。
+export const CW_ORDER: readonly Dir[] = ['down', 'right', 'up', 'left'];
+
+const NEXT_CW: Record<Dir, Dir> = {
+  down: 'right',
+  right: 'up',
+  up: 'left',
+  left: 'down',
+};
+
+const NEXT_CCW: Record<Dir, Dir> = {
+  down: 'left',
+  left: 'up',
+  up: 'right',
+  right: 'down',
+};
+
+export function nextDir(current: Dir, turn: Turn): Dir {
+  return turn === 'cw' ? NEXT_CW[current] : NEXT_CCW[current];
+}

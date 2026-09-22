@@ -56,7 +56,9 @@ body {
   opacity: 0.5;
 }
 
-.board {
+/* 回転しない枠。サイズ・背景・overflowはここが持つ。CLEAR/STUCKのオーバーレイも
+   ここの直下に置くことで、盤面が傾いても文字は正立したまま読める。 */
+.board-frame {
   --cell: clamp(14px, 3.6vw, 26px);
   position: relative;
   width: calc(var(--cell) * var(--cols));
@@ -64,6 +66,14 @@ body {
   background: #1b2027;
   border-radius: 6px;
   overflow: hidden;
+}
+
+/* 回転する中身（タイル・スライム）だけを包む層。
+   「重力が回る」のではなく「箱そのものが傾く」という見せ方にするための回転はここにかける。 */
+.board {
+  position: absolute;
+  inset: 0;
+  transition: transform 320ms ease;
 }
 
 .tile {

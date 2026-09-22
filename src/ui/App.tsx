@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Board } from '../core/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Board, Dir } from '../core/types';
 import { Terrain } from '../core/types';
 import { xOf, yOf } from '../core/board';
 import { generateSolvableLevel, type GeneratedLevel } from '../core/generate';
 import { useKeyboard } from './useKeyboard';
 import { useGameSession } from '../game/useGameSession';
+import { CANONICAL_ANGLE, shortestDelta } from './tilt';
 
 const WIDTH = 20;
 const HEIGHT = 20;
+const TILT_MS = 320; // styles.css の .board { transition: transform 320ms } と合わせる
 
 export default function App() {
   const [seed, setSeed] = useState(() => Date.now() >>> 0);
@@ -42,7 +44,49 @@ function Game({ seed, onRegenerate }: { seed: number; onRegenerate: () => void }
 function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; onRegenerate: () => void }) {
   const boardRef = useRef(board);
   const { status, view, score, moves, input, retry } = useGameSession(boardRef.current);
-  useKeyboard(input, retry);
+
+  // 「重力が回る」のではなく「箱そのものが傾く」という見せ方にするための回転角度。
+  // ゲームロジックには一切関与しない、純粋に表示上の状態（ui/tilt.ts）。
+  const [rotation, setRotation] = useState(0);
+  const lastDirRef = useRef<Dir>('down');
+  const [tilting, setTilting] = useState(false);
+  const tiltTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const requestInput = useCallback(
+    (dir: Dir) => {
+      if (tilting || status !== 'IDLE') return;
+
+      const delta = shortestDelta(CANONICAL_ANGLE[lastDirRef.current], CANONICAL_ANGLE[dir]);
+      lastDirRef.current = dir;
+
+      if (delta === 0) {
+        // 同じ方向への連続入力は、箱を傾け直す必要がない
+        input(dir);
+        return;
+      }
+
+      setRotation((r) => r + delta);
+      setTilting(true);
+      tiltTimerRef.current = setTimeout(() => {
+        setTilting(false);
+        input(dir);
+      }, TILT_MS);
+    },
+    [tilting, status, input],
+  );
+
+  const requestRetry = useCallback(() => {
+    if (tiltTimerRef.current) clearTimeout(tiltTimerRef.current);
+    setTilting(false);
+    setRotation(0);
+    lastDirRef.current = 'down';
+    retry();
+  }, [retry]);
+
+  useKeyboard(requestInput, requestRetry);
+  useEffect(() => () => {
+    if (tiltTimerRef.current) clearTimeout(tiltTimerRef.current);
+  }, []);
 
   const terrainTiles = useMemo(() => {
     const tiles: { idx: number; x: number; y: number; kind: 'wall' | 'obstacle' | 'drain' }[] = [];
@@ -56,7 +100,7 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
     return tiles;
   }, []);
 
-  const busy = status !== 'IDLE';
+  const busy = tilting || status !== 'IDLE';
 
   return (
     <div className="app">
@@ -69,29 +113,31 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
       </div>
 
       <div
-        className="board"
+        className="board-frame"
         style={{ ['--cols' as string]: WIDTH, ['--rows' as string]: HEIGHT } as React.CSSProperties}
       >
-        {terrainTiles.map((t) => (
-          <div
-            key={t.idx}
-            className={`tile ${t.kind}`}
-            style={{ transform: `translate(calc(var(--cell) * ${t.x}), calc(var(--cell) * ${t.y}))` }}
-          />
-        ))}
+        <div className="board" style={{ transform: `rotate(${rotation}deg)` }}>
+          {terrainTiles.map((t) => (
+            <div
+              key={t.idx}
+              className={`tile ${t.kind}`}
+              style={{ transform: `translate(calc(var(--cell) * ${t.x}), calc(var(--cell) * ${t.y}))` }}
+            />
+          ))}
 
-        {view.map((cell) => (
-          <div
-            key={cell.id}
-            className={`slime${cell.draining ? ' draining' : ''}`}
-            style={{ transform: `translate(calc(var(--cell) * ${cell.x}), calc(var(--cell) * ${cell.y}))` }}
-          />
-        ))}
+          {view.map((cell) => (
+            <div
+              key={cell.id}
+              className={`slime${cell.draining ? ' draining' : ''}`}
+              style={{ transform: `translate(calc(var(--cell) * ${cell.x}), calc(var(--cell) * ${cell.y}))` }}
+            />
+          ))}
+        </div>
 
         {status === 'CLEARED' && (
           <div className="cleared-overlay">
             <div>CLEAR!</div>
-            <button onPointerDown={retry}>もう一度遊ぶ (R)</button>
+            <button onPointerDown={requestRetry}>もう一度遊ぶ (R)</button>
             <button onPointerDown={onRegenerate}>新しい盤面</button>
           </div>
         )}
@@ -100,29 +146,29 @@ function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; 
           <div className="cleared-overlay stuck">
             <div>詰みました…</div>
             <p>残りのセルからは、もう全回収できません</p>
-            <button onPointerDown={retry}>リトライ (R)</button>
+            <button onPointerDown={requestRetry}>リトライ (R)</button>
             <button onPointerDown={onRegenerate}>新しい盤面</button>
           </div>
         )}
       </div>
 
       <div className="controls">
-        <button aria-label="上方向へ重力" disabled={busy} onPointerDown={() => input('up')}>
+        <button aria-label="上方向へ重力" disabled={busy} onPointerDown={() => requestInput('up')}>
           ↑
         </button>
         <div className="controls-row">
-          <button aria-label="左方向へ重力" disabled={busy} onPointerDown={() => input('left')}>
+          <button aria-label="左方向へ重力" disabled={busy} onPointerDown={() => requestInput('left')}>
             ←
           </button>
-          <button aria-label="下方向へ重力" disabled={busy} onPointerDown={() => input('down')}>
+          <button aria-label="下方向へ重力" disabled={busy} onPointerDown={() => requestInput('down')}>
             ↓
           </button>
-          <button aria-label="右方向へ重力" disabled={busy} onPointerDown={() => input('right')}>
+          <button aria-label="右方向へ重力" disabled={busy} onPointerDown={() => requestInput('right')}>
             →
           </button>
         </div>
         <div className="controls-row">
-          <button className="retry" onPointerDown={retry}>
+          <button className="retry" onPointerDown={requestRetry}>
             リトライ (R)
           </button>
           <button className="retry" onPointerDown={onRegenerate}>

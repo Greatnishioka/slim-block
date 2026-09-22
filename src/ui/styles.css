@@ -1,0 +1,120 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  background: #12151a;
+  color: #e8e8e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+
+.hint {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.board {
+  --cell: clamp(14px, 3.6vw, 26px);
+  position: relative;
+  width: calc(var(--cell) * var(--cols));
+  height: calc(var(--cell) * var(--rows));
+  background: #1b2027;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tile {
+  position: absolute;
+  width: var(--cell);
+  height: var(--cell);
+}
+
+.tile.wall {
+  background: #363c46;
+}
+
+.tile.obstacle {
+  background: #566072;
+}
+
+.slime {
+  position: absolute;
+  width: var(--cell);
+  height: var(--cell);
+  padding: 1.5px;
+  transition: transform 55ms linear;
+  will-change: transform;
+}
+
+.slime::after {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #4fd689;
+  border-radius: 3px;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.controls-row {
+  display: flex;
+  gap: 6px;
+}
+
+.controls button {
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  border-radius: 8px;
+  border: 1px solid #3a4150;
+  background: #1e242c;
+  color: #e8e8e8;
+  cursor: pointer;
+}
+
+.controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.controls button:not(:disabled):active {
+  background: #2a323d;
+}

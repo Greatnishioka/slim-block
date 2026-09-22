@@ -1,110 +1,77 @@
-import { useMemo, useRef, useState } from 'react';
-import type { Board, Dir } from '../core/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Board } from '../core/types';
 import { Terrain } from '../core/types';
-import { parseBoard, xOf, yOf } from '../core/board';
-import { settle, type Tick } from '../core/gravity';
-import { findClusters } from '../core/clusters';
-import { buildDemoLayout } from './demoLayout';
+import { xOf, yOf } from '../core/board';
+import { generateSolvableLevel, type GeneratedLevel } from '../core/generate';
 import { useKeyboard } from './useKeyboard';
+import { useGameSession } from '../game/useGameSession';
 
 const WIDTH = 20;
 const HEIGHT = 20;
-const TICK_MS = 55;
 
-interface ViewCell {
-  id: number;
-  x: number;
-  y: number;
-}
-
-function toView(board: Board): ViewCell[] {
-  return board.cells.map((c) => ({ id: c.id, x: xOf(board, c.idx), y: yOf(board, c.idx) }));
+export default function App() {
+  const [seed, setSeed] = useState(() => Date.now() >>> 0);
+  return <Game key={seed} seed={seed} onRegenerate={() => setSeed(Date.now() >>> 0)} />;
 }
 
 /**
- * 確定済みの Tick 列を、ビュー状態の時系列として再生する。
- * board は既に最終状態まで進んでいる前提で、view 側だけを tick ごとに追従させる。
- * これは arch.md §6.3, §8.2 の「core はアニメーション完了を待たない」設計をM1で先取りしたもの。
- * 本実装は game/playback.ts（M2）へ引き継がれる想定の仮実装。
+ * seedが変わったら key 経由で丸ごと再マウントされ、生成状態も useGameSession の内部状態も
+ * ゼロから作り直される（React の「keyでリセットする」定石。arch.md の状態機械はそのまま活かせる）。
  */
-function playTicks(
-  ticks: Tick[],
-  board: Board,
-  startView: ViewCell[],
-  onFrame: (view: ViewCell[]) => void,
-  onDone: () => void,
-): () => void {
-  const byId = new Map(startView.map((v) => [v.id, { ...v }]));
-  let i = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+function Game({ seed, onRegenerate }: { seed: number; onRegenerate: () => void }) {
+  const [level, setLevel] = useState<GeneratedLevel | null>(null);
 
-  function step() {
-    if (i >= ticks.length) {
-      onDone();
-      return;
-    }
-    const tick = ticks[i++];
-    for (const move of tick.moves) {
-      const v = byId.get(move.cellId);
-      if (v) {
-        v.x = xOf(board, move.to);
-        v.y = yOf(board, move.to);
-      }
-    }
-    onFrame([...byId.values()]);
-    timer = setTimeout(step, TICK_MS);
+  useEffect(() => {
+    // useEffect内で行うことで、生成が終わるまで先に「生成中…」を描画できる。
+    // solverによる検証は最大でも1秒未満で終わる想定（core/generate.ts参照）。
+    const generated = generateSolvableLevel({ width: WIDTH, height: HEIGHT, seed });
+    setLevel(generated);
+  }, [seed]);
+
+  if (!level) {
+    return (
+      <div className="app">
+        <div className="hint">盤面を生成中…</div>
+      </div>
+    );
   }
-  step();
 
-  return () => {
-    if (timer) clearTimeout(timer);
-  };
+  return <GameBoard board={level.board} seed={seed} onRegenerate={onRegenerate} />;
 }
 
-export default function App() {
-  const boardRef = useRef<Board | null>(null);
-  if (!boardRef.current) {
-    boardRef.current = parseBoard(buildDemoLayout(WIDTH, HEIGHT));
-  }
-  const board = boardRef.current;
-
-  const [view, setView] = useState<ViewCell[]>(() => toView(board));
-  const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const [clusterCount, setClusterCount] = useState(() => findClusters(board).length);
-
-  function input(dir: Dir) {
-    if (busyRef.current) return;
-    const ticks = settle(board, dir);
-    if (ticks.length === 0) return; // 何も動かない入力は無視する（arch.md §7）
-    busyRef.current = true;
-    setBusy(true);
-    playTicks(ticks, board, view, setView, () => {
-      busyRef.current = false;
-      setBusy(false);
-      setClusterCount(findClusters(board).length);
-    });
-  }
-
-  useKeyboard(input);
+function GameBoard({ board, seed, onRegenerate }: { board: Board; seed: number; onRegenerate: () => void }) {
+  const boardRef = useRef(board);
+  const { status, view, score, moves, input, retry } = useGameSession(boardRef.current);
+  useKeyboard(input, retry);
 
   const terrainTiles = useMemo(() => {
-    const tiles: { idx: number; x: number; y: number; kind: 'wall' | 'obstacle' }[] = [];
-    for (let idx = 0; idx < board.terrain.length; idx++) {
-      const t = board.terrain[idx];
-      if (t === Terrain.Wall) tiles.push({ idx, x: xOf(board, idx), y: yOf(board, idx), kind: 'wall' });
-      else if (t === Terrain.Obstacle) tiles.push({ idx, x: xOf(board, idx), y: yOf(board, idx), kind: 'obstacle' });
+    const tiles: { idx: number; x: number; y: number; kind: 'wall' | 'obstacle' | 'drain' }[] = [];
+    for (let idx = 0; idx < boardRef.current.terrain.length; idx++) {
+      const t = boardRef.current.terrain[idx];
+      if (t === Terrain.Wall) tiles.push({ idx, x: xOf(boardRef.current, idx), y: yOf(boardRef.current, idx), kind: 'wall' });
+      else if (t === Terrain.Obstacle)
+        tiles.push({ idx, x: xOf(boardRef.current, idx), y: yOf(boardRef.current, idx), kind: 'obstacle' });
+      else if (t === Terrain.Drain) tiles.push({ idx, x: xOf(boardRef.current, idx), y: yOf(boardRef.current, idx), kind: 'drain' });
     }
     return tiles;
-  }, [board]);
+  }, []);
+
+  const busy = status !== 'IDLE';
 
   return (
     <div className="app">
-      <div className="hint">
-        M1 PoC — 矢印キー / WASD で重力方向を切り替え（塊: {clusterCount}）
+      <div className="hud">
+        <span>SCORE {score.toLocaleString()}</span>
+        <span>MOVES {moves}</span>
+        <span className="seed" title="この盤面の乱数シード">
+          #{seed}
+        </span>
       </div>
 
-      <div className="board" style={{ ['--cols' as string]: WIDTH, ['--rows' as string]: HEIGHT } as React.CSSProperties}>
+      <div
+        className="board"
+        style={{ ['--cols' as string]: WIDTH, ['--rows' as string]: HEIGHT } as React.CSSProperties}
+      >
         {terrainTiles.map((t) => (
           <div
             key={t.idx}
@@ -116,10 +83,27 @@ export default function App() {
         {view.map((cell) => (
           <div
             key={cell.id}
-            className="slime"
+            className={`slime${cell.draining ? ' draining' : ''}`}
             style={{ transform: `translate(calc(var(--cell) * ${cell.x}), calc(var(--cell) * ${cell.y}))` }}
           />
         ))}
+
+        {status === 'CLEARED' && (
+          <div className="cleared-overlay">
+            <div>CLEAR!</div>
+            <button onPointerDown={retry}>もう一度遊ぶ (R)</button>
+            <button onPointerDown={onRegenerate}>新しい盤面</button>
+          </div>
+        )}
+
+        {status === 'STUCK' && (
+          <div className="cleared-overlay stuck">
+            <div>詰みました…</div>
+            <p>残りのセルからは、もう全回収できません</p>
+            <button onPointerDown={retry}>リトライ (R)</button>
+            <button onPointerDown={onRegenerate}>新しい盤面</button>
+          </div>
+        )}
       </div>
 
       <div className="controls">
@@ -135,6 +119,14 @@ export default function App() {
           </button>
           <button aria-label="右方向へ重力" disabled={busy} onPointerDown={() => input('right')}>
             →
+          </button>
+        </div>
+        <div className="controls-row">
+          <button className="retry" onPointerDown={retry}>
+            リトライ (R)
+          </button>
+          <button className="retry" onPointerDown={onRegenerate}>
+            新しい盤面
           </button>
         </div>
       </div>

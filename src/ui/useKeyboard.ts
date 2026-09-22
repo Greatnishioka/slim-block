@@ -13,23 +13,29 @@ const KEY_MAP: Record<string, Dir> = {
 };
 
 /**
- * 方向キー入力を onDir に渡す。キーリピートは無視し、方向キーのみ preventDefault する
- * （ページスクロールの抑止。arch.md §10）。
- * onDir は ref 経由で毎レンダー最新化し、リスナーの張り直しは行わない。
+ * 方向キー入力を onDir に、'R' キーを onRetry に渡す。キーリピートは無視し、
+ * 方向キーのみ preventDefault する（ページスクロールの抑止。arch.md §10）。
+ * ハンドラは ref 経由で毎レンダー最新化し、リスナーの張り直しは行わない。
  */
-export function useKeyboard(onDir: (dir: Dir) => void): void {
-  const handlerRef = useRef(onDir);
+export function useKeyboard(onDir: (dir: Dir) => void, onRetry?: () => void): void {
+  const dirRef = useRef(onDir);
+  const retryRef = useRef(onRetry);
   useEffect(() => {
-    handlerRef.current = onDir;
-  }, [onDir]);
+    dirRef.current = onDir;
+    retryRef.current = onRetry;
+  }, [onDir, onRetry]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.repeat) return;
+      if (e.code === 'KeyR') {
+        retryRef.current?.();
+        return;
+      }
       const dir = KEY_MAP[e.code];
       if (!dir) return;
       e.preventDefault();
-      handlerRef.current(dir);
+      dirRef.current(dir);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
